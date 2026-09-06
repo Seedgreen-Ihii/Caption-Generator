@@ -15,7 +15,9 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 FREE_LIMIT = 3
-
+# Initialize session state for memory
+if "last_caption" not in st.session_state:
+    st.session_state.last_caption = ""
 # --- 2. MANDATORY USER IDENTIFICATION ---
 st.markdown("### Step 1: Enter your email to start")
 user_email = st.text_input("Enter your email address:").strip().lower()
@@ -78,19 +80,24 @@ if st.button("Generate Caption"):
         st.warning("Please enter property details first!")
     elif is_paid_user:
         with st.spinner("Generating caption..."):
-            caption = model.generate_content(master_prompt).text
-            st.success("✨ Here is your caption:")
-            st.write(caption)
+            # Save to memory, then refresh
+            st.session_state.last_caption = model.generate_content(master_prompt).text
+            st.rerun()
     elif remaining_free > 0:
         with st.spinner("Generating caption..."):
-            caption = model.generate_content(master_prompt).text
+            # Save to memory
+            st.session_state.last_caption = model.generate_content(master_prompt).text
             
             # Increment and update the database permanently
             new_count = generations_used + 1
             supabase.table("user_trials").update({"generations_used": new_count}).eq("email", user_email).execute()
             
-            st.success("✨ Here is your caption:")
-            st.write(caption)
+            # Refresh to update the counter banner
             st.rerun()
     else:
         st.error("Trial limit reached for this email! Please buy lifetime access to continue.")
+
+# --- 7. DISPLAY THE GENERATED CAPTION ---
+if st.session_state.last_caption:
+    st.success("✨ Here is your caption:")
+    st.write(st.session_state.last_caption)

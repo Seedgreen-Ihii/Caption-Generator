@@ -1,49 +1,60 @@
 import streamlit as st
 import google.generativeai as genai
-import pandas as pd
+from supabase import create_client, Client
 
 st.set_page_config(page_title="Real Estate Caption Generator", page_icon="🏡")
 st.title("🏡 Real Estate Caption Generator")
 
-# --- 1. LIVE DATABASE FETCH (Google Sheets via Zapier) ---
-@st.cache_data(ttl=300) # Refreshes the list every 5 minutes to check for new buyers
-def get_authorized_emails():
-    # PASTE YOUR PUBLISHED GOOGLE SHEET CSV LINK INSIDE THE QUOTES BELOW
-    sheet_csv_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSkVOHHpFL9umRyuRezmYsp26pFVorHGHbmcwLkIegCdfYU05L0yiDg_CS3ZPetGIWfGJ0jXxl9LsFM/pub?output=csv" 
-    try:
-        df = pd.read_csv(sheet_csv_url)
-        return [str(e).strip().lower() for e in df['email'].dropna().tolist()]
-    except Exception as e:
-        return []
+# --- 1. CONNECT TO SUPABASE DATABASE ---
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# The app now pulls the live list automatically
-AUTHORIZED_EMAILS = get_authorized_emails()
-
-# --- 2. SESSION STATE (Memory for the current browser tab) ---
-if "generation_count" not in st.session_state:
-    st.session_state.generation_count = 0
-if "last_caption" not in st.session_state:
-    st.session_state.last_caption = ""
+supabase = init_supabase()
 
 FREE_LIMIT = 3
 
-# --- 3. SIDEBAR: PAID MEMBER LOGIN ---
-st.sidebar.header("Paid Member Access")
-user_email = st.sidebar.text_input("Already bought? Enter your email:").strip().lower()
+# --- 2. MANDATORY USER IDENTIFICATION ---
+st.markdown("### Step 1: Enter your email to start")
+user_email = st.text_input("Enter your email address:").strip().lower()
 
-is_paid_user = user_email in AUTHORIZED_EMAILS
+if not user_email:
+    st.info("👆 Please enter your email above to access the caption generator.")
+    st.stop()
 
-if is_paid_user:
-    st.sidebar.success("✅ Lifetime Access Active")
-elif user_email:
-    st.sidebar.error("❌ Email not found on the buyer list.")
-    st.sidebar.markdown("[Buy Lifetime Access ($7)](https://doleeseed.gumroad.com/l/lxdlsf)")
+# --- 3. FETCH OR CREATE USER RECORD ---
+# Query Supabase for this specific email
+response = supabase.table("user_trials").select("*").eq("email", user_email).execute()
+user_data = response.data
+
+if not user_data:
+    # New User: Create record in database
+    new_user = {"email": user_email, "generations_used": 0, "is_paid": False}
+    supabase.table("user_trials").insert(new_user).execute()
+    generations_used = 0
+    is_paid_user = False
 else:
-    st.sidebar.info("Already purchased? Enter your buyer email above.")
+    # Existing User: Fetch persistent record
+    generations_used = user_data[0]["generations_used"]
+    is_paid_user = user_data[0]["is_paid"]
 
-# --- 4. MAIN APP LOGIC ---
+remaining_free = FREE_LIMIT - generations_used
+
+# --- 4. STATUS BANNERS ---
+if is_paid_user:
+    st.success("✅ **Lifetime Access Active** (Unlimited Generations)")
+elif remaining_free > 0:
+    st.caption(f"🎁 **Free Trial Active:** You have **{remaining_free} of {FREE_LIMIT}** free generations remaining.")
+else:
+    st.warning("🔒 **Trial Expired:** You have used all 3 of your free trial generations.")
+    st.markdown("### Unlock Unlimited Access for $7")
+    st.markdown("[👉 **Click Here to Buy Lifetime Access for $7**](https://doleeseed.gumroad.com/l/lxdlsf)")
+
+# --- 5. APP INTERFACE ---
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel('gemini-3.6-flash')
 
 platform = st.selectbox("Choose the platform:", ["Instagram", "Facebook", "LinkedIn", "TikTok"])
 tone = st.selectbox("Choose the caption tone:", ["Professional", "Fun & Energetic", "Urgent (Just Listed!)", "Luxury & Exclusive"])
@@ -55,40 +66,31 @@ Write a highly engaging, conversion-optimized {tone} social media caption specif
 
 Strictly follow these rules:
 1. Hook: Start with a powerful, scroll-stopping opening line.
-2. Framework: Use the AIDA framework (Attention, Interest, Desire, Action) to build emotional connection and highlight unique selling propositions.
-3. SEO: Seamlessly integrate high-ranking real estate search keywords relevant to the property.
-4. Action: End with a highly compelling Call to Action (CTA) that drives immediate inquiries, clicks, or DMs.
-5. Formatting: Use excellent spacing, relevant emojis, and highly targeted hashtags suited for {platform}'s algorithm.
+2. Framework: Use the AIDA framework (Attention, Interest, Desire, Action).
+3. SEO: Seamlessly integrate high-ranking real estate search keywords.
+4. Action: End with a highly compelling Call to Action (CTA).
+5. Formatting: Use excellent spacing, relevant emojis, and targeted hashtags.
 """
 
-remaining_free = FREE_LIMIT - st.session_state.generation_count
-
-# --- 5. TRIAL STATUS BANNER ---
-if not is_paid_user:
-    if remaining_free > 0:
-        st.caption(f"🎁 **Free Trial Active:** You have **{remaining_free} of {FREE_LIMIT}** free generations remaining.")
-    else:
-        st.warning("🔒 You've used all 3 of your free trial generations!")
-        st.markdown("### Unlock Unlimited Access for $7")
-        st.markdown("[👉 **Click Here to Buy Lifetime Access for $7**](https://doleeseed.gumroad.com/l/lxdlsf)")
-
-# --- 6. GENERATE BUTTON LOGIC ---
+# --- 6. GENERATION LOGIC WITH PERSISTENT COUNTER ---
 if st.button("Generate Caption"):
     if not details:
         st.warning("Please enter property details first!")
     elif is_paid_user:
-        with st.spinner("Generating high-converting caption..."):
-            st.session_state.last_caption = model.generate_content(master_prompt).text
-            st.rerun() 
+        with st.spinner("Generating caption..."):
+            caption = model.generate_content(master_prompt).text
+            st.success("✨ Here is your caption:")
+            st.write(caption)
     elif remaining_free > 0:
-        with st.spinner("Generating high-converting caption..."):
-            st.session_state.last_caption = model.generate_content(master_prompt).text
-            st.session_state.generation_count += 1
-            st.rerun() 
+        with st.spinner("Generating caption..."):
+            caption = model.generate_content(master_prompt).text
+            
+            # Increment and update the database permanently
+            new_count = generations_used + 1
+            supabase.table("user_trials").update({"generations_used": new_count}).eq("email", user_email).execute()
+            
+            st.success("✨ Here is your caption:")
+            st.write(caption)
+            st.rerun()
     else:
-        st.error("Trial limit reached! Please buy lifetime access to continue.")
-
-# --- 7. DISPLAY CAPTION ---
-if st.session_state.last_caption:
-    st.success("✨ Here is your caption:")
-    st.write(st.session_state.last_caption)
+        st.error("Trial limit reached for this email! Please buy lifetime access to continue.")

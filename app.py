@@ -80,23 +80,32 @@ if st.button("Generate Caption"):
         st.warning("Please enter property details first!")
     elif is_paid_user:
         with st.spinner("Generating caption..."):
-            # Save to memory, then refresh
-            st.session_state.last_caption = model.generate_content(master_prompt).text
-            st.rerun()
+            try:
+                st.session_state.last_caption = model.generate_content(master_prompt).text
+                st.rerun()
+            except Exception as e:
+                if "429" in str(e) or "ResourceExhausted" in str(e):
+                    st.warning("⚠️ The AI is a little busy right now! Please wait 20 seconds and try again.")
+                else:
+                    st.error(f"An unexpected error occurred: {e}")
+                    
     elif remaining_free > 0:
         with st.spinner("Generating caption..."):
-            # Save to memory
-            st.session_state.last_caption = model.generate_content(master_prompt).text
-            
-            # Increment and update the database permanently
-            new_count = generations_used + 1
-            supabase.table("user_trials").update({"generations_used": new_count}).eq("email", user_email).execute()
-            
-            # Refresh to update the counter banner
-            st.rerun()
+            try:
+                st.session_state.last_caption = model.generate_content(master_prompt).text
+                
+                # Increment and update the database permanently
+                new_count = generations_used + 1
+                supabase.table("user_trials").update({"generations_used": new_count}).eq("email", user_email).execute()
+                
+                st.rerun()
+            except Exception as e:
+                if "429" in str(e) or "ResourceExhausted" in str(e):
+                    st.warning("⚠️ The AI is a little busy right now! Please wait 20 seconds and try again.")
+                else:
+                    st.error(f"An unexpected error occurred: {e}")
     else:
         st.error("Trial limit reached for this email! Please buy lifetime access to continue.")
-
 # --- 7. DISPLAY THE GENERATED CAPTION ---
 if st.session_state.last_caption:
     st.success("✨ Here is your caption:")

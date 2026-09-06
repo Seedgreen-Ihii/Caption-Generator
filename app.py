@@ -1,13 +1,11 @@
 import streamlit as st
 import google.generativeai as genai
 
-st.title("System Check 🔍")
+st.title("🏡 Real Estate Caption Generator")
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+model = genai.GenerativeModel('gemini-2.5-flash')
 
-st.write("Google says your API key has access to these specific models:")
-try:
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            st.write(m.name)
-except Exception as e:
-    st.write(f"Error: {e}")
+details = st.text_input("Enter property details (e.g., 3 bed, pool, downtown):")
+if st.button("Generate Caption") and details:
+    prompt = f"Act as an expert real estate copywriter. Write an engaging Instagram caption for: {details}. Include emojis and hashtags."
+    st.write(model.generate_content(prompt).text)

@@ -4,13 +4,15 @@ import google.generativeai as genai
 st.set_page_config(page_title="Real Estate Caption Generator", page_icon="🏡")
 st.title("🏡 Real Estate Caption Generator")
 
-# Initialize session state to track free generations
+# Initialize session states for memory
 if "generation_count" not in st.session_state:
     st.session_state.generation_count = 0
+if "last_caption" not in st.session_state:
+    st.session_state.last_caption = ""
 
 FREE_LIMIT = 3
 
-# List of authorized buyer emails (manually add buyer emails here)
+# List of authorized buyer emails
 AUTHORIZED_EMAILS = [
     "buyer1@gmail.com",
     "realtorjohn@yahoo.com",
@@ -40,6 +42,19 @@ platform = st.selectbox("Choose the platform:", ["Instagram", "Facebook", "Linke
 tone = st.selectbox("Choose the caption tone:", ["Professional", "Fun & Energetic", "Urgent (Just Listed!)", "Luxury & Exclusive"])
 details = st.text_input("Enter property details (e.g., 3 bed, pool, downtown):")
 
+# --- THE SUPERCHARGED PROMPT ---
+master_prompt = f"""
+Act as a world-class real estate copywriter and digital marketing strategist. 
+Write a highly engaging, conversion-optimized {tone} social media caption specifically for {platform} about this property: {details}.
+
+Strictly follow these rules:
+1. Hook: Start with a powerful, scroll-stopping opening line.
+2. Framework: Use the AIDA framework (Attention, Interest, Desire, Action) to build emotional connection and highlight unique selling propositions.
+3. SEO: Seamlessly integrate high-ranking real estate search keywords relevant to the property.
+4. Action: End with a highly compelling Call to Action (CTA) that drives immediate inquiries, clicks, or DMs.
+5. Formatting: Use excellent spacing, relevant emojis, and highly targeted hashtags suited for {platform}'s algorithm.
+"""
+
 # Calculate remaining free generations
 remaining_free = FREE_LIMIT - st.session_state.generation_count
 
@@ -60,19 +75,20 @@ if st.button("Generate Caption"):
         st.warning("Please enter property details first!")
         
     elif is_paid_user:
-        # Unlimited generations for paid users
-        prompt = f"Act as an expert real estate copywriter. Write a {tone} social media caption specifically optimized for {platform} about this property: {details}. Include relevant formatting, emojis, and hashtags suited for {platform}."
-        with st.spinner("Generating caption..."):
-            st.write(model.generate_content(prompt).text)
+        with st.spinner("Generating high-converting caption..."):
+            st.session_state.last_caption = model.generate_content(master_prompt).text
+            st.rerun() 
             
     elif remaining_free > 0:
-        # Allow generation for trial users and increment the counter
-        prompt = f"Act as an expert real estate copywriter. Write a {tone} social media caption specifically optimized for {platform} about this property: {details}. Include relevant formatting, emojis, and hashtags suited for {platform}."
-        with st.spinner("Generating caption..."):
-            st.write(model.generate_content(prompt).text)
+        with st.spinner("Generating high-converting caption..."):
+            st.session_state.last_caption = model.generate_content(master_prompt).text
             st.session_state.generation_count += 1
-            st.rerun()  # Refresh app to instantly update the remaining count
+            st.rerun() 
             
     else:
-        # Block user if trial is finished
         st.error("Trial limit reached! Please buy lifetime access or log in via the sidebar.")
+
+# --- DISPLAY THE GENERATED CAPTION ---
+if st.session_state.last_caption:
+    st.success("✨ Here is your caption:")
+    st.write(st.session_state.last_caption)

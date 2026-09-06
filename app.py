@@ -19,12 +19,35 @@ FREE_LIMIT = 3
 if "last_caption" not in st.session_state:
     st.session_state.last_caption = ""
 # --- 2. MANDATORY USER IDENTIFICATION ---
-st.markdown("### Step 1: Enter your email to start")
-user_email = st.text_input("Enter your email address:").strip().lower()
+# Create a memory slot for the user's email
+if "logged_in_email" not in st.session_state:
+    st.session_state.logged_in_email = ""
 
-if not user_email:
-    st.info("👆 Please enter your email above to access the caption generator.")
-    st.stop()
+# If they haven't logged in yet, show the form
+if not st.session_state.logged_in_email:
+    st.markdown("### Step 1: Enter your email to start")
+    
+    # Create a form with a text box and an Enter button
+    with st.form("login_form"):
+        input_email = st.text_input("Enter your email address:")
+        submitted = st.form_submit_button("Enter")
+        
+        if submitted:
+            if input_email:
+                st.session_state.logged_in_email = input_email.strip().lower()
+                st.rerun() # Refresh the page to unlock the app
+            else:
+                st.warning("Please type an email address first.")
+                
+    st.stop() # Stops the rest of the app from loading until they click Enter
+
+# Set the email variable for the rest of the database code to use
+user_email = st.session_state.logged_in_email
+
+# (Optional: A small button so they can change their email if they made a typo)
+if st.button("Log out / Change Email"):
+    st.session_state.logged_in_email = ""
+    st.rerun()
 
 # --- 3. FETCH OR CREATE USER RECORD ---
 # Query Supabase for this specific email

@@ -124,11 +124,9 @@ if st.button("Generate Caption"):
                 st.rerun()
             except Exception as e:
                 if "429" in str(e) or "ResourceExhausted" in str(e):
-                    st.warning("⚠️ The AI is a little busy right now! Please wait 20 seconds and try again.")
+                    st.warning("🔥 We are experiencing unusually high demand! Our AI servers are currently at maximum capacity. Please grab a coffee and try again in a few minutes.")
                 else:
-                    st.error(f"An unexpected error occurred: {e}")
-    else:
-        st.error("Trial limit reached for this email! Please buy lifetime access to continue.")
+                    st.error("An unexpected error occurred. Please verify your details and try again.")
 # --- 7. DISPLAY THE GENERATED CAPTION ---
 if st.session_state.last_caption:
     st.success("✨ Here is your caption:")
